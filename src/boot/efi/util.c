@@ -3,6 +3,7 @@
 #include "proto/device-path.h"
 #include "proto/simple-text-io.h"
 #include "ticks.h"
+#include "console.h"
 #include "util.h"
 
 EFI_STATUS parse_boolean(const char *v, bool *b) {
@@ -336,23 +337,34 @@ EFI_STATUS file_read(EFI_FILE *dir, const char16_t *name, size_t off, size_t siz
         if (!IN_SET(err, EFI_SUCCESS, EFI_BAD_BUFFER_SIZE))
                 return err;
 
+        uint64_t key;
+
         /* Some firmwares cannot handle large file reads and will instead return EFI_BAD_BUFFER_SIZE.
          * As a workaround, read such files in small chunks.
          *
          * https://github.com/systemd/systemd/issues/25911 */
         if (err == EFI_BAD_BUFFER_SIZE) {
+                log_error_status(err, "wooping 1: %m\n");
+                console_key_read(&key, UINT64_MAX);
+
                 /* Handle is probably in a permanent bad state. Re-open the file. */
                 (void) handle->Close(handle);
                 handle = NULL;
 
                 err = dir->Open(dir, &handle, (char16_t *) name, EFI_FILE_MODE_READ, 0);
-                if (err != EFI_SUCCESS)
+                if (err != EFI_SUCCESS) {
+                        log_error_status(err, "wooping 2: %m\n");
+                        console_key_read(&key, UINT64_MAX);
                         return err;
+                }
 
                 if (off > 0) {
                         err = handle->SetPosition(handle, off);
-                        if (err != EFI_SUCCESS)
+                        if (err != EFI_SUCCESS){
+                                log_error_status(err, "wooping 3: %m\n");
+                                console_key_read(&key, UINT64_MAX);
                                 return err;
+                        }
                 }
 
                 size_t remaining = size;
@@ -361,8 +373,11 @@ EFI_STATUS file_read(EFI_FILE *dir, const char16_t *name, size_t off, size_t siz
                         size_t chunk = MIN(1024U * 1024U, remaining);
 
                         err = handle->Read(handle, &chunk, (uint8_t *) read_buf + size);
-                        if (err != EFI_SUCCESS)
+                        if (err != EFI_SUCCESS){
+                                log_error_status(err, "wooping 4: %m\n");
+                                console_key_read(&key, UINT64_MAX);
                                 return err;
+                        }
                         if (chunk == 0)
                                 /* Caller requested more bytes than are in file. */
                                 break;
