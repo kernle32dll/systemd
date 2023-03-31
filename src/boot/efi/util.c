@@ -348,7 +348,7 @@ EFI_STATUS file_read(EFI_FILE *dir, const char16_t *name, size_t off, size_t siz
                 console_key_read(&key, UINT64_MAX);
 
                 /* Handle is probably in a permanent bad state. Re-open the file. */
-                (void) handle->Close(handle);
+                handle->Close(handle);
                 handle = NULL;
 
                 err = dir->Open(dir, &handle, (char16_t *) name, EFI_FILE_MODE_READ, 0);
